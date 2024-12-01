@@ -51,9 +51,6 @@ namespace PlsNoSlug
         private ItemDef purple2;
         private ItemDef purple3;
 
-        // We need our item definition to persist through our functions, and therefore make it a class field.
-        private static ItemDef myItemDef;
-
         // The Awake() method is run at the very start when the game is initialized.
         public void Awake()
         {
@@ -67,6 +64,7 @@ namespace PlsNoSlug
             On.RoR2.PickupDropTable.GenerateDrop += OverrideItemDrop;
 
             // Hook into interactable card selection to modify chest spawns
+            SceneDirector.onPrePopulateSceneServer += IncreaseInteractableCredits;
             SceneDirector.onGenerateInteractableCardSelection += TripleChestSpawnChances;
 
             Log.Info($"{PluginName} initialized!");
@@ -139,7 +137,7 @@ namespace PlsNoSlug
                 {
                     if (card.spawnCard && card.spawnCard.name.Contains("Chest"))
                     {
-                        card.selectionWeight *= 3;
+                        card.selectionWeight *= 5;
                         Log.Debug($"Triple spawn weight for chest: {card.spawnCard.name}");
                     }
                 }
@@ -148,40 +146,17 @@ namespace PlsNoSlug
             Log.Info("Chest spawn chances doubled.");
         }
 
-
-        private void GlobalEventManager_onCharacterDeathGlobal(DamageReport report)
-        {
-            // If a character was killed by the world, we shouldn't do anything.
-            if (!report.attacker || !report.attackerBody)
-            {
-                return;
-            }
-
-            var attackerCharacterBody = report.attackerBody;
-
-            // We need an inventory to do check for our item
-            if (attackerCharacterBody.inventory)
-            {
-                // Store the amount of our item we have
-                var garbCount = attackerCharacterBody.inventory.GetItemCount(myItemDef.itemIndex);
-                if (garbCount > 0 &&
-                    // Roll for our 50% chance.
-                    Util.CheckRoll(50, attackerCharacterBody.master))
-                {
-                    // Since we passed all checks, we now give our attacker the cloaked buff.
-                    // Note how we are scaling the buff duration depending on the number of the custom item in our inventory.
-                    attackerCharacterBody.AddTimedBuff(RoR2Content.Buffs.Cloak, 3 + garbCount);
-                }
-            }
-        }
-
         private ItemDef GetRandomItemOfTier(ItemTier tier)
         {
             var itemsOfTier = ItemCatalog.allItems
                 .Where(itemIndex =>
                 {
                     var itemDef = ItemCatalog.GetItemDef(itemIndex);
-                    return itemDef != null && itemDef.tier == tier && !itemDef.hidden && Run.instance.availableItems.Contains(itemIndex);
+                    return itemDef != null && 
+                    itemDef.tier == tier && 
+                    !itemDef.hidden && 
+                    Run.instance.availableItems.Contains(itemIndex) &&
+                   !itemDef.tags.Contains(ItemTag.Scrap);
                 })
                 .ToList();
 
@@ -194,8 +169,11 @@ namespace PlsNoSlug
             Log.Info($"No items found for tier {tier}");
             return null;
         }
-
-
+        private void IncreaseInteractableCredits(SceneDirector sceneDirector)
+        {
+            sceneDirector.interactableCredit *= 2; 
+            Log.Info($"Increased interactable credits for more chests.");
+        }
 
         private PickupIndex OverrideItemDrop(On.RoR2.PickupDropTable.orig_GenerateDrop orig, PickupDropTable self, Xoroshiro128Plus rng)
         {
@@ -251,7 +229,6 @@ namespace PlsNoSlug
                 // And then drop our defined item in front of the player.
 
                 Log.Info($"Player pressed F2. Spawning our custom item at coordinates {transform.position}");
-                PickupDropletController.CreatePickupDroplet(PickupCatalog.FindPickupIndex(myItemDef.itemIndex), transform.position, transform.forward * 20f);
             }
         }
     }
